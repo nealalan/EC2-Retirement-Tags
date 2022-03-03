@@ -1,0 +1,297 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Retirement Instances - Stack will start instances stopped by AWS",
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [{
+          "Parameters": [
+            "S3Bucket"
+          ],
+          "Label": {
+            "default": "Bucket Location for Code"
+          }
+        },
+        {
+          "Parameters": [
+            "TagRole",
+            "RemoveTagRole",
+            "StartRole"
+          ],
+          "Label": {
+            "default": "IAM roles used for each Lambda Function"
+          }
+        }
+      ]
+    }
+  },
+  "Parameters": {
+    "S3Bucket": {
+      "Description": "An Amazon S3 bucket in the same AWS Region as your function. The bucket can be in a different AWS account.",
+      "Type": "String"
+    },
+    "TagRole": {
+      "Description": "ARN of the IAM role used for the Tagging Lambda Function",
+      "Type": "String"
+    },
+    "RemoveTagRole": {
+      "Description": "ARN of the IAM role used for the Tag Removing Lambda Function",
+      "Type": "String"
+    },
+    "StartRole": {
+      "Description": "ARN of the IAM role used for the Start Instance Function",
+      "Type": "String"
+    }
+  },
+  "Mappings": {
+    "Function": {
+      "Start": {
+        "S3Key": "Start-Stopped-Retirement-Instances.zip",
+        "FunctionName": "Start-Stopped-Retirement-Instances",
+        "Handler": "Start-Stopped-Retirement-Instances.lambda_handler"
+      },
+      "Tag": {
+        "S3Key": "Tag-Retirement-Instances.zip",
+        "FunctionName": "Tag-Retirement-Instances",
+        "Handler": "Tag-Retirement-Instances.lambda_handler"
+
+      },
+      "RemoveTag": {
+        "S3Key": "Remove-Retirement-Instances-Tag.zip",
+        "FunctionName": "Remove-Retirement-Instances-Tag",
+        "Handler": "Remove-Retirement-Instances-Tag.lambda_handler"
+      }
+    }
+  },
+  "Resources": {
+    "TagRetirementInstances": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Handler": {
+          "Fn::FindInMap": ["Function", "Tag", "Handler"]
+        },
+        "Role": {
+          "Ref": "TagRole"
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "S3Bucket"
+          },
+          "S3Key": {
+            "Fn::FindInMap": ["Function", "Tag", "S3Key"]
+          }
+        },
+        "Description": "Tag's instances due for retirement",
+        "FunctionName": {
+          "Fn::FindInMap": ["Function", "Tag", "FunctionName"]
+        },
+        "Runtime": "python3.8",
+        "Timeout": 25,
+        "TracingConfig": {
+          "Mode": "Active"
+        }
+      }
+    },
+    "RemoveRetirementInstanceTags": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Handler": {
+          "Fn::FindInMap": ["Function", "RemoveTag", "Handler"]
+        },
+        "Role": {
+          "Ref": "RemoveTagRole"
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "S3Bucket"
+          },
+          "S3Key": {
+            "Fn::FindInMap": ["Function", "RemoveTag", "S3Key"]
+          }
+        },
+        "Description": "Removes Tag's from previously Retired instances",
+        "FunctionName": {
+          "Fn::FindInMap": ["Function", "RemoveTag", "FunctionName"]
+        },
+        "Runtime": "python3.8",
+        "Timeout": 25,
+        "TracingConfig": {
+          "Mode": "Active"
+        }
+      }
+    },
+    "StartStoppedRetirementInstances": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Handler": {
+          "Fn::FindInMap": ["Function", "Start", "Handler"]
+        },
+        "Role": {
+          "Ref": "StartRole"
+        },
+        "Code": {
+          "S3Bucket": {
+            "Ref": "S3Bucket"
+          },
+          "S3Key": {
+            "Fn::FindInMap": ["Function", "Start", "S3Key"]
+          }
+        },
+        "Description": "Starts 'Retirement-Instances' that have been stopped by AWS",
+        "FunctionName": {
+          "Fn::FindInMap": ["Function", "Start", "FunctionName"]
+        },
+        "Runtime": "python3.8",
+        "Timeout": 10,
+        "TracingConfig": {
+          "Mode": "Active"
+        }
+      }
+    },
+    "TagInstancesScheduledRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description": "Instance-Retirement - Tag Instances Rule",
+        "ScheduleExpression": "cron(0 23 * * ? *)",
+        "State": "ENABLED",
+        "Targets": [{
+          "Arn": {
+            "Fn::GetAtt": ["TagRetirementInstances", "Arn"]
+          },
+          "Id": "TargetTagInstancesFunctionV1"
+        }]
+      }
+    },
+    "PermissionForEventsToInvokeTagLambdaFunction": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "TagRetirementInstances"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "events.amazonaws.com",
+        "SourceArn": {
+          "Fn::GetAtt": ["TagInstancesScheduledRule", "Arn"]
+        }
+      }
+    },
+    "RemoveTagScheduledRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description": "Instance-Retirement - Remove Tags Rule",
+        "ScheduleExpression": "cron(50 22 * * ? *)",
+        "State": "ENABLED",
+        "Targets": [{
+          "Arn": {
+            "Fn::GetAtt": ["RemoveRetirementInstanceTags", "Arn"]
+          },
+          "Id": "RemoveTagFunctionV1"
+        }]
+      }
+    },
+    "PermissionForEventsToInvokeRemoveTagLambdaFunction": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "RemoveRetirementInstanceTags"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "events.amazonaws.com",
+        "SourceArn": {
+          "Fn::GetAtt": ["RemoveTagScheduledRule", "Arn"]
+        }
+      }
+    },
+    "StartRetirementInstancesScheduledRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description": "Instance-Retirement - Start Instances Rule",
+        "ScheduleExpression": "rate(5 minutes)",
+        "State": "ENABLED",
+        "Targets": [{
+          "Arn": {
+            "Fn::GetAtt": ["StartStoppedRetirementInstances", "Arn"]
+          },
+          "Id": "StartRetirementInstancesFunctionV1"
+        }]
+      }
+    },
+    "PermissionForEventsToInvokeStartInstancesLambdaFunction": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "StartStoppedRetirementInstances"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "events.amazonaws.com",
+        "SourceArn": {
+          "Fn::GetAtt": ["StartRetirementInstancesScheduledRule", "Arn"]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "TagRetirementInstances": {
+      "Description": "Function name",
+      "Value": {
+        "Ref": "TagRetirementInstances"
+      }
+    },
+    "TagRetirementInstancesARN": {
+      "Description": "ARN of Lambda Function",
+      "Value": {
+        "Fn::GetAtt": [
+          "TagRetirementInstances",
+          "Arn"
+        ]
+      }
+    },
+    "RemoveRetirementInstanceTags": {
+      "Description": "Function name",
+      "Value": {
+        "Ref": "RemoveRetirementInstanceTags"
+      }
+    },
+    "RemoveRetirementInstanceTagsARN": {
+      "Description": "ARN of Lambda Function",
+      "Value": {
+        "Fn::GetAtt": [
+          "RemoveRetirementInstanceTags",
+          "Arn"
+        ]
+      }
+    },
+    "StartStoppedRetirementInstances": {
+      "Description": "Function name",
+      "Value": {
+        "Ref": "StartStoppedRetirementInstances"
+      }
+    },
+    "StartStoppedRetirementInstancesARN": {
+      "Description": "ARN of Lambda Function",
+      "Value": {
+        "Fn::GetAtt": [
+          "StartStoppedRetirementInstances",
+          "Arn"
+        ]
+      }
+    },
+    "TagInstancesScheduledRuleARN": {
+      "Description": "The ARN of the Cloudwatch Events Rule used as a Function Trigger",
+      "Value": {
+      "Fn::GetAtt": ["TagInstancesScheduledRule", "Arn"]
+      }
+    },
+    "RemoveTagScheduledRuleARN": {
+      "Description": "The ARN of the Cloudwatch Events Rule used as a Function Trigger",
+      "Value": {
+      "Fn::GetAtt": ["RemoveTagScheduledRule", "Arn"]
+      }
+    },
+    "StartRetirementInstancesScheduledRuleARN": {
+      "Description": "The ARN of the Cloudwatch Events Rule used as a Function Trigger",
+      "Value": {
+      "Fn::GetAtt": ["StartRetirementInstancesScheduledRule", "Arn"]
+      }
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "iam_policy.template - Create Managed IAM policies.",
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": []
+    }
+  },
+  "Parameters": {
+    "PolicyName": {
+      "Description": "The name to use for the IAM Policy.  If omitted, a name will be generated for the policy. OPTIONAL",
+      "Default": "",
+      "ConstraintDescription": "Use alphanumeric and '+=,.@-_' characters. Maximum 128 characters.",
+      "AllowedPattern": "^[0-9a-zA-Z+=,.@\\-_]*$",
+      "MaxLength": 128,
+      "Type": "String"
+    }
+  },
+  "Conditions": {
+    "SetPolicyName": {
+      "Fn::Not": [{
+        "Fn::Equals": [{
+            "Ref": "PolicyName"
+          },
+          ""
+        ]
+      }]
+    }
+  },
+  "Resources": {
+    "ManagedPolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "ManagedPolicyName": {
+          "Fn::If": [
+            "SetPolicyName",
+            {
+              "Ref": "PolicyName"
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+              "Effect": "Allow",
+              "Action": [
+                "ec2:DescribeInstances",
+                "ec2:DeleteTags"  
+              ],
+              "Resource": "*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": "logs:CreateLogGroup",
+              "Resource": "arn:aws:logs:<REGION><ACCOUNT_ID>:*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": "arn:aws:logs:<REGION><ACCOUNT_ID>:log-group:/aws/lambda/Remove-Retirement-Instances-Tag:*"
+            }
+          ]
+        },
+        "Description": "Allows EC2 and Cloudwatch Logs Access"
+      }
+    }
+  },
+  "Outputs": {
+    "ManagedPolicyArn": {
+      "Description": "Managed Policy ARN",
+      "Value": {
+        "Ref": "ManagedPolicy"
+      }
+    }
+  }
+}
