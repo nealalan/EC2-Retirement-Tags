@@ -1,0 +1,26 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "ec2:DescribeInstances",
+                "ec2:DeleteTags"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        },
+        {
+            "Action": "logs:CreateLogGroup",
+            "Resource": "arn:aws:logs:<REGION>:<ACCOUNT_NUMBER>:*",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "arn:aws:logs:<REGION>:<ACCOUNT_NUMBER>:log-group:/aws/lambda/Remove-Retirement-Instances-Tag:*",
+            "Effect": "Allow"
+        }
+    ]
+}
